@@ -1,0 +1,729 @@
+---
+title: "NRL Elo Ratings and Prediction Model from the 2017 - 2022 season"
+author: "Gabriel Thornton"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, R.options=knitr::opts_chunk$set(warnings=FALSE, message=FALSE, fig.width=12, fig.height=8)}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+**What is an Elo rating system?**  
+    
+An Elo rating system was first developed by Hungarian-American physics professor, Arpad Elo in 1960, and consists of assigning a player or team a numerical value to indicate their skill level. Typically, values exceeding 1500 Elo Rating Points can be considered a good team with values reaching 1700+ a very strongly performing unit. It was originally, and commonly, designed for chess players but with the advancement in sports analytics, it can be an extremely valuable tool in assessing teams strengths and weaknesses. It is a dynamic, iterative model that updates the teams strength rating after every completed match.    
+  
+**Why is it useful in NRL Analysis?**
+    
+Elo rating analysis in sports, and in particular in the NRL, can be extremely useful when supporting decisions within a club as a singular analysis but also in conjunction with other data insights. It gives a simple and interpretative way to track performance across a season or many seasons as temporal analysis and gives a time frame for periods of success or when the team is not in form. That information can be useful when coinciding with enhanced, game-specific data analysis of the intricacies and key performance indicators (KPI) of rugby league that attribute to the success or failure.  
+  
+The dynamic nature of Elo rating modelling means that the teams Elo score updates weekly depending on the outcome of the match and the extent of the points change is directly attributed to the teams expected outcome probability. This gives a truer reflection of team form than the simple win/loss ratio as lower ranked teams will gain more points for a win than a higher ranked team as their probabilistic prediction is less likely to come true. Furthermore, Elo rating points are used in 'Power Rankings' which offer a real-time insight into team strength across the season as opposed to the NRL points based ladder. For example, a team maybe in 9th place on the ladder, who are just missing finals, with an Elo score of 1550, whereas another team can be in 6th place but have a rating of 1520. This model suggests that the trailing team is stronger but is lower down in the ladder as they have beaten stronger opposition more recently so are in a better position to qualify for the finals as the season progresses.  
+
+A key aspect of Elo rating modelling that can be used in NRL clubs is the fact that it is the backbone of future prediction and simulation of matches. The data analytics department of a club can use methods similar to this to simulate future matches thus predicting a final ladder projection. Predicting game outcomes generate season-long expected win totals which are then used for evaluating whether the team has under or over-performed. The ultimate goal for all teams in the NRL is to qualify for finals football and reach the Grand Final, Elo modelling can analyse and assess the teams finals chances.  
+  
+A key role of the analytics department within a professional sports club is to use data to find insights and then to successfully and simply convey these to the relevant decision-making stakeholders such as coaches, performance staff or players. Elo rating analysis uses simple data and maths to exhibit big insights for those who might not understand the data science aspect behind it. 
+  
+**My motivation and goals for  this report.** 
+  
+I have recently completed my Graduate Certificate in Data Analytics for Sport Performance from Victoria University and I want to use the knowledge I have learnt to apply a data analytics approach to a real-world sports context. I want to show how analytics can be applied to performance analysis and forecasting and demonstrate my understanding of advanced modelling techniques, whilst tailoring it to the NRL and the Melbourne Storm specifically. The role of analytics within professional sport is ever expanding and is imperative to be used to enhance performance by informing smarter, evidence based decisions.  
+  
+My aim is to create a series of reports and projects that can be used in NRL analysis to create a portfolio of my knowledge and showcasing my skills in manipulating real-world data, visualising and interpreting results and most importantly, communicating these findings and insights coherently to non-technical stakeholders.  
+
+I am passionate about data analytics, sport and particularly NRL and the Melbourne Storm. I want to turn this passion into a professional opportunity whether that be a job or volunteering role to learn from professionals in the environment. 
+
+
+```{r Introduction}
+
+
+
+```
+
+# Data Set
+  
+The data set used in this workflow is that of the scorelines for every fixture (including finals) from the 2017 season through to the end of the 2021 season.   
+  
+The variables include temporal information such as the year, round, date and time of kick off as well geographical information such as the state region and stadium. The key variables used in the analysis are the named Home Team (hteam) and Away Team (ateam) and their scores for each match. The 'match_id' can be used to identify specific fixtures throughout this time period.    
+  
+I was able to get this data source from the website: https://www.kaggle.com/datasets/thecruncherau/nrl-results 
+  
+  
+
+```{r Load and Clean the Data, warning=FALSE}
+
+# Load Packages ----
+library(tidyverse)
+library(ggplot2)
+library(elo)
+library(plotly)
+library(rmarkdown)
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(htmltools)
+
+# Load Data ----
+nrl <- read_csv("/home/gthornton1999/NRL_Portfolio/Data/Elo/nrldata.csv")
+
+# Kable table of raw data
+nrl %>%
+  kable(caption = "Table 1 - Raw NRL Match Data 2017 - 2021") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  scroll_box(height = "400px")
+
+```
+
+# Elo Model Rating System  
+  
+My rationale for developing a Elo rating model is to help inform decisions with a professional sports environment on their and their opponents relative periods of strengths and weaknesses. This time-series analysis can produce probabilistic predictions of match outcomes that can be used to simulate matches or seasons and forecast ladder predictions and the probability of qualifying for finals football. As this data set is from the 2017 season to the end of the 2021 season, this model can be used to forecast the 2022 season and evaluate its accuracy against the real-life data.        
+  
+As previously mentioned, it is a dynamic, iterative system whereby the value increases or decreases depending on the outcome of the match. The system uses the following formula to update the Elo rating of each team based on the outcome of the match.  
+  
+$$ Rs =  Ra + K * (Sa - Ea) $$ 
+Where:  
+* Rs = New Elo Rating  
+* Ra = previous Elo Rating  
+* K = K-factor parameter  
+* Sa = The actual outcome of the match  
+* Ea = The expected outcome of the match  
+      
+The expected outcome of matches in the NRL is calculated using a logistic function that compares the ratings of the 2 teams and gives the probability that one team will win based on those current ratings, with a home field advantage parameter incorporated. The equation is as follows:  
+
+$$ Expected Outcome1 =  1 / (1 + 10^((Rating2 - (Rating1 + Home Field Advantage)) / 400))         $$
+  
+Where:  
+
+* Rating2 = Away team Elo Rating
+* Rating1 = Home team Elo Rating
+* Home Field Advantage = 65 Elo Rating points.
+* 400 = a sensitivity constant commonly used in team sports. Eg. a 400-point Elo difference between the 2 teams means the stronger team has a 90% chance of winning.  
+  
+The expected outcome for the second team is -> *Expected Outcome2 = 1 - Expected Outcome1* 
+  
+The winning team has their Elo rating increased using the model's K adjustment factor and the losing team loses points following the same rule.  
+  
+The Elo Model K factor (20 points) controls how much a teams rating changes after each match based on the result with a higher K-value making the rating changes more responsive and a lower K-value makes the ratings more stable and less reactive to results.  
+  
+**Example**  
+  
+We can calculate the Elo Rating points change for a match by using the Equations 1 and 2, for example, Melbourne Storm have an Elo Rating of 1600 and are playing at AAMI Park (+65 points) against the Newcastle Knights who have a rating of 1500. 
+  
+Expected Outcome (home team) = 1 / (1 + 10^((1500 - 1665) / 400))  
+                  = 1 / (1 + 10^(-165 / 400))  
+                  = 1 / (1 + 10^(-0.4125))  
+                  = 1 / (1 + 0.386)  
+                  ≈ 0.721 -> 72.1% chance of win  
+  
+If the Storm won (Actual Result = 1) each team Elo Rating would change to:  
+  
+New Storm Elo Rating = 1600 + 20 * (1 - 0.721)  
+                     = 1600 + 20 * 0.279  
+                     = 1600 + 5.58  
+                     ≈ 1605.6  
+  
+New Knights Elo Rating = 1500 + 20 * (0 - 0.279)  
+                       = 1500 - 5.58  
+                       ≈ 1494.4  
+   
+With the rate of change = +/- 5.6 Elo Rating Points.    
+  
+  
+The Elo rating system used in this NRL analysis uses the following parameters as standard in home/away team sports:  
+  
+* K-factor = 20 
+* Home Field Advantage = 65 Elo Rating Points.  
+* Sensitivity constant = 400 
+  
+  
+The key component of this Elo rating system is its ability to automatically update the teams rating each week as the matches are completed. As this data set contains weekly fixtures and results for 5 seasons, the rating model is required to attribute Elo points change for every fixture that each team plays. To reiterate, the value that points change is dependent on the expected, probabilistic outcome of either side winning which is calculated using the most up-to-date team Elo ratings. The '*update_elo*' function is used to loop the common, reoccurring equations used to calculate the new Elo rating (Rs) using the pre-calculated expected outcomes. This reallocation of Elo Ratings for each team is then looped weekly following the results and changed depending on the match outcome.   
+  
+
+  
+
+  
+
+
+
+```{r Elo Model Rating System, warning=FALSE}
+
+## Initialise Team ratings ---------------------------------------------
+# get character strings for each individual team.
+teams <- unique(c(nrl$hteam, nrl$ateam))
+# attribute a base Elo score of 1500 to each team
+elo_ratings <- setNames(rep(1500, length(teams)), teams)
+# Parameters
+home_field_advantage <- 65
+k_factor <- 20
+
+
+## Create the Elo Update Function ---------------------------------------
+# This function calculates the expected result and updates ratings based on the actual score.
+update_elo <- function(team1, team2, score1, score2, ratings, k = 20) { # K-Factor = 20 -> controls how much a rating changes after each game
+  rating1 <- ratings[team1]
+  rating2 <- ratings[team2]
+# Expected result including home field advantage (65 Elo points)
+  expected1 <- 1 / (1 + 10^((rating2 - (rating1 + home_field_advantage)) / 400))
+  expected2 <- 1 - expected1
+# Actual result
+  actual1 <- ifelse(score1 > score2, 1, ifelse(score1 == score2, 0.5, 0))
+  actual2 <- 1 - actual1
+# Update ratings
+  ratings[team1] <- rating1 + k * (actual1 - expected1) # Elo rating equation
+  ratings[team2] <- rating2 + k * (actual2 - expected2)
+  
+  return(ratings)
+}
+
+
+## Order matches Chronologically -------------------------
+# Convert date column to Date class if it's not already
+nrl$date <- as.Date(nrl$date)
+# arrange in chronological order
+nrl <- nrl %>%
+  arrange(year, round, date)
+
+
+
+## Apply Elo Rating Updates -------------------------
+# This is where we loop through each match, update the ratings, and store the history
+elo_history <- list()
+
+for (i in 1:nrow(nrl)) {
+  game <- nrl[i, ]
+# Update ratings
+  elo_ratings <- update_elo(
+    team1 = game$hteam,
+    team2 = game$ateam,
+    score1 = game$hscore,
+    score2 = game$ascore,
+    ratings = elo_ratings,
+    k = 20
+  )
+# Store Elo after this match
+  elo_history[[i]] <- data.frame(
+    match_id = game$match_id,
+    year = game$year,
+    round = game$round,
+    date = game$date,
+    team = c(game$hteam, game$ateam),
+    rating = c(elo_ratings[game$hteam], elo_ratings[game$ateam])
+  )
+}
+# Combine all rounds into one data frame
+elo_df <- do.call(rbind, elo_history)
+
+# remove date variable
+elo_df <- elo_df %>% select(-date)
+
+# combine year and round into a factor for the x axis of plot
+elo_df <- elo_df %>%
+  mutate(year_round = factor(paste(year, round, sep = "R"), 
+                             levels = unique(paste(year, round, sep = "R"))))
+ 
+# Shows each teams Elo rating after each round every year in the dataset (including finals)
+
+
+
+# Final Table of every teams Elo rating at the end of the 2021 season-----
+# Convert to a data frame from a named numeric vector
+elo_ratings <- data.frame(
+  team = names(elo_ratings),
+  elo = as.numeric(elo_ratings)
+)
+# Reorder the Elo ratings of each team into descending order, add a rank column and rename column to 'Elo Rating'.
+elo_ratings <- elo_ratings %>%
+  arrange(desc(elo)) %>%
+  mutate(Rank = row_number()) %>%
+  rename(`Elo Rating` = elo) %>%
+  select(Rank, team, `Elo Rating`)
+
+knitr::kable(
+  elo_ratings,
+  caption = "*Table 2 - Each NRL Team's Elo Rating at the End of the 2021 Season*"
+)
+
+## Visualise the Ratings Over Time -------------
+teams_elo <- ggplot(elo_df, aes(x = year_round, y = rating, color = team, group = team)) +
+  geom_line(alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Figure 1 - NRL Elo Ratings Over Rounds",
+       x = "Season and Round", y = "Elo Rating", caption = "Figure 1 - Interactive line graph showcasing teams Elo Rating change over time") +
+   scale_x_discrete(breaks = elo_df$year_round[seq(1, length(elo_df$year_round), by = 70)]) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+# Interactive
+ggplotly(teams_elo)
+
+```
+
+This interactive plot showcases each teams Elo rating progression from the start of the 2017 season to the end of 2021 (including finals football if the team qualified).  
+
+
+
+
+
+
+# 2022 Simulation and Ladder Prediction  
+  
+Using the weekly updated Elo ratings, I was able to import the 2022 season fixture list and simulate the season and the final ladder standing as well. This exercise is done to be able to evaluate the accuracy of using ongoing Elo ratings as acceptable metrics for team quality.  
+  
+Table 3 shows match data from the 2022 season (inc. round, date, location, home team and away team) as well as updated Elo ratings for each team and the associated probabilistic odds for the home side winning. The final column is the simulated, predicted winner of the game.  
+
+
+```{r 2022 Simulation}
+
+# import 2022 fixture list
+nrl2022 <- read_csv("/home/gthornton1999/NRL_Portfolio/Data/Elo/nrl-2022-UTC.csv")
+
+# remove Result column
+nrl2022 = subset(nrl2022, select = -c(Result))
+# rename columns for ease
+nrl2022 <- nrl2022 %>%
+  rename(
+    match_id = `Match Number`,
+    round = `Round Number`,
+    date = Date,
+    location = Location,
+    hteam = `Home Team`,
+    ateam = `Away Team`
+  )
+
+
+# Use the latest Elo ratings for each team and turn them into the beginning of 2022
+elo_ratings_2022 <- setNames(elo_ratings$`Elo Rating`, elo_ratings$team)
+
+# Simulate match outcomes once and update Elo ------
+
+#parameters
+home_field_advantage <- 65
+k <- 20
+
+set.seed(123)  
+
+nrl2022_results <- nrl2022 %>%
+  mutate(
+    hteam_rating = NA_real_,
+    ateam_rating = NA_real_,
+    expected_home_win = NA_real_,
+    predicted_winner = NA_character_
+  )
+
+for (i in 1:nrow(nrl2022_results)) {
+  home <- nrl2022_results$hteam[i]
+  away <- nrl2022_results$ateam[i]
+  
+rating_home <- elo_ratings_2022[home]
+rating_away <- elo_ratings_2022[away]
+
+  
+  expected_home <- 1 / (1 + 10^((rating_away - (rating_home + home_field_advantage)) / 400))
+  
+# Simulate outcome
+  home_win <- runif(1) < expected_home
+  result_home <- ifelse(home_win, 1, 0)
+  result_away <- 1 - result_home
+  
+# Update ratings
+  new_rating_home <- rating_home + k * (result_home - expected_home)
+  new_rating_away <- rating_away + k * (result_away - (1 - expected_home))
+  
+  elo_ratings_2022[home] <- new_rating_home
+  elo_ratings_2022[away] <- new_rating_away
+  
+# Save results
+  nrl2022_results$hteam_rating[i] <- rating_home
+  nrl2022_results$ateam_rating[i] <- rating_away
+  nrl2022_results$expected_home_win[i] <- expected_home
+  nrl2022_results$predicted_winner[i] <- ifelse(home_win, home, away)
+}
+
+# View nrl2022_results as a kableextra table
+nrl2022_results %>%
+  kable(caption = "Table 3 - 2022 NRL Match Data Set with Home and Away Team Elo Scores and Probabilistic Odds of Match Winner with the predicted winner") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  scroll_box(height = "400px")
+
+
+# Build the Predicted Ladder ------
+# Assign 2 points to each predicted winner
+nrl2022_results <- nrl2022_results %>%
+  mutate(predicted_points = 2)
+
+# Sum up points for each team
+predicted_ladder <- nrl2022_results %>%
+  group_by(team = predicted_winner) %>%
+  summarise(predicted_points = sum(predicted_points), .groups = "drop") %>%
+  arrange(desc(predicted_points)) %>%
+  mutate(predicted_rank = row_number())
+View(predicted_ladder)
+
+# Compare to Actual ladder
+# create manual actual ladder for 2022 (cant find downloadable)
+#library(tibble)
+
+actual_ladder <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Panthers",       42,     1,
+  "Sharks",        38,     2,
+  "Cowboys", 36,   3,
+  "Eels",        34,     4,
+  "Storm",        32,     5,
+  "Roosters",        32,     6,
+  "Rabbitohs", 30,     7,
+  "Raiders",       30,     8,
+  "Broncos",       28,     9,
+  "Dragons", 26, 10,
+  "Sea Eagles",       20,    11,
+  "Bulldogs",    18,    12,
+  "Knights",      14,    13,
+  "Warriors",   14,    14,
+  "Wests Tigers",           10,    15,
+  "Titans",      10,    16
+)
+View(actual_ladder)
+
+
+
+
+
+```
+
+This is the simulated fixtures of the 2022 season based on the each individual team Elo Ratings from the previous 5 seasons. Each match is simulated using Elo Ratings as the dominant precursor when calculating the expected outcome and probabilistic prediction for the winner, whilst including home field advantage as well. The simulated winner's (and loser's) rating is then altered depending on the outcome. It is then cycled through for the next weeks fixtures. 
+
+
+# Accuracy Evaluation
+  
+
+In order to assess the accuracy of using Elo rating points as indicators for team strength, there are a number of accuracy metrics that can be used to quantify this relationship, each providing a slightly different look at whether or not it is a strong indicator.  
+  
+Accuracy Metrics:  
+  
+### 1. Spearmans Rank Correlation
+  
+Using Spearman's Rank Correlation to compare the accuracy of each teams final Elo ratings ladder position versus their final ladder position on a combined NRL Points Ladder from 2017 - 2021.
+
+```{r Accuracy Evaluation, warning=FALSE}
+
+#1. Spearmans Rank -------------------------------------------------------------------
+
+# Ladder for each season 2017 - 2021
+ladder_2017 <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Storm",       44,     1,
+  "Roosters",        38,     2,
+  "Broncos", 36,   3,
+  "Eels",        36,     4,
+  "Sharks",        34,     5,
+  "Sea Eagles",        32,     6,
+  "Panthers", 30,     7,
+  "Cowboys",       30,     8,
+  "Dragons",       28,     9,
+  "Raiders", 26, 10,
+  "Bulldogs",       24,    11,
+  "Rabbitohs",    22,    12,
+  "Warriors",      18,    13,
+  "Wests Tigers",   18,    14,
+  "Titans",           18,    15,
+  "Knights",      14,    16
+)
+ladder_2018 <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Roosters",       34,     1,
+  "Storm",        34,     2,
+  "Rabbitohs", 34,   3,
+  "Sharks",        34,     4,
+  "Broncos",        32,     5,
+  "Panthers",        32,     6,
+  "Dragons", 32,     7,
+  "Warriors",       32,     8,
+  "Wests Tigers",       26,     9,
+  "Raiders", 22, 10,
+  "Knights",       20,    11,
+  "Bulldogs",    18,    12,
+  "Cowboys",      18,    13,
+  "Titans",   18,    14,
+  "Sea Eagles",           16,    15,
+  "Eels",      14,    16
+)
+ladder_2019 <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Storm",       42,     1,
+  "Roosters",        36,     2,
+  "Rabbitohs", 34,   3,
+  "Raiders",        32,     4,
+  "Eels",        30,     5,
+  "Sea Eagles",        30,     6,
+  "Sharks", 26,     7,
+  "Broncos",       25,     8,
+  "Wests Tigers",       24,     9,
+  "Panthers", 24, 10,
+  "Knights",       22,    11,
+  "Bulldogs",    22,    12,
+  "Warriors",      21,    13,
+  "Cowboys",   20,    14,
+  "Dragons",           18,    15,
+  "Titans",      10,    16
+)
+ladder_2020 <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Panthers",       37,     1,
+  "Storm",        32,     2,
+  "Eels", 30,   3,
+  "Roosters",        28,     4,
+  "Raiders",        28,     5,
+  "Rabbitohs",        24,     6,
+  "Knights", 23,     7,
+  "Sharks",       20,     8,
+  "Titans",       18,     9,
+  "Warriors", 16, 10,
+  "Wests Tigers",       14,    11,
+  "Dragons",    14,    12,
+  "Sea Eagles",      14,    13,
+  "Cowboys",   10,    14,
+  "Bulldogs",           6,    15,
+  "Broncos",      6,    16
+)
+ladder_2021 <- tribble(
+  ~team,               ~points, ~actual_rank,
+  "Storm",       44,     1,
+  "Panthers",        44,     2,
+  "Rabbitohs", 42,   3,
+  "Sea Eagles",        34,     4,
+  "Roosters",        34,     5,
+  "Eels",        32,     6,
+  "Knights", 26,     7,
+  "Titans",       22,     8,
+  "Sharks",       22,     9,
+  "Raiders", 22, 10,
+  "Dragons",       18,    11,
+  "Warriors",    18,    12,
+  "Wests Tigers",      18,    13,
+  "Broncos",   16,    14,
+  "Cowboys",           16,    15,
+  "Bulldogs",      8,    16
+)
+
+# Combine the 5 seasons by Team then sum the points
+combined_ladder_df <- bind_rows(ladder_2017, ladder_2018, ladder_2019, ladder_2020, ladder_2021)
+combined_ladder <- combined_ladder_df %>% 
+  group_by(team) %>% 
+  summarise(total_points = sum(points, na.rm = TRUE), .groups = "drop") %>% 
+  arrange(desc(total_points))
+# Knittr table
+knitr::kable(
+  combined_ladder,
+  caption = "*Table 4 - The Combined NRL Points Ladder from Seasons 2017 - 2021*"
+)
+
+# Merge elo_ratings and combined_ladder
+eloVcombined <- left_join(elo_ratings, combined_ladder, by = "team")
+
+# create rank columns
+eloVcombined <- eloVcombined %>%
+  mutate(
+    elo_rank = rank(-`Elo Rating`, ties.method = "min"),
+    points_rank = rank(-total_points, ties.method = "min")
+  )
+
+# plot 
+ggplot(eloVcombined, aes(x = points_rank, y = elo_rank, label = team)) +
+  geom_point(size = 3, color = "blue") +
+  geom_text(vjust = -0.5, size = 3.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50") +
+  scale_x_reverse(breaks = 1:nrow(eloVcombined)) +
+  scale_y_reverse(breaks = 1:nrow(eloVcombined)) +
+  labs(
+    title = "Figure 2 - Elo Rank vs NRL Points Rank (2017–2021)",
+    x = "Points Rank",
+    y = "Elo Rank",
+    caption = "Spearman's Rank Correlation Coefficient = 0.898"
+  ) +
+  theme_minimal()
+
+# Spearmans rank correlation
+PointsvElo_correlation <- cor(eloVcombined$Elo, eloVcombined$total_points, method = "spearman")
+
+```
+
+Spearman's Rank Correlation is a statistical measurement that assesses the correlation or fit of a set of data points compared to the other actual, recorded data with the best possible positive fit equaling 1 and a negative correlation being -1 and no fit being 0. In this case, the final Elo rating scores per team from 2017-2021 are assessed against the combined NRL points ladder for those seasons to examine the accuracy evaluation. The correlation rank was **0.898** meaning that the final Elo ratings of each team correlate strongly with their actual competition points total indicating the Elo model's effectiveness at ranking team strength over time.     
+
+
+### 2. How many predicted results were correct over the course of the 2022 season?
+
+```{r Match Predictions}
+# reload 2022 data so we have the result column
+nrl2022_winner <- read_csv("/home/gthornton1999/NRL_Portfolio/Data/Elo/nrl-2022-UTC.csv")
+
+# change column names
+nrl2022_winner <- nrl2022_winner %>%
+  rename(
+    match_id = `Match Number`,
+    round = `Round Number`,
+    date = Date,
+    location = Location,
+  )
+# separate the home score and away score in the Result column
+nrl2022_winner <- nrl2022_winner %>%
+  separate(Result, into = c("hscore", "ascore"), sep = "-", convert = TRUE)
+# add new column denoting the winner
+nrl2022_winner <- nrl2022_winner %>%
+  mutate(
+    actual_winner = case_when(
+      hscore > ascore ~ `Home Team`,
+      ascore > hscore ~ `Away Team`,
+      hscore == ascore ~ "Draw"
+    )
+  )
+
+# add actual winner column to the nrl2022_results df to compare against the predicted winner. 
+nrl2022_results <- nrl2022_results %>%
+  left_join(
+    nrl2022_winner %>% select(match_id, actual_winner),
+    by = "match_id"
+  )
+
+# compare predicted winner vs actual winner
+# creating a true/false column
+nrl2022_results <- nrl2022_results %>%
+  mutate(correct_prediction = predicted_winner == actual_winner)
+
+# overall accuracy
+# Turn the table into a data frame
+prediction_table <- as.data.frame(table(nrl2022_results$correct_prediction))
+# Rename the columns
+colnames(prediction_table) <- c("Correct Prediction", "Count")
+# Display as a nicely formatted table
+knitr::kable(prediction_table,
+             caption = "Table 5 - Accuracy of Elo Model Predictions (2022 Season)",
+             align = "c")
+
+
+
+```
+  
+Table 5 represents the count of correctly predicted match outcomes as well as incorrectly predicted. The Elo rating prediction model correctly predicted 118 out of the 201 matches throughout the season, at percentage accuracy of **58.7%**. This is a relatively high successful prediction percentage considering the model has limited knowledge of performance based impacts that occurred during the season such as injuries or suspensions and instead is influenced by historical form and home ground advantage. It is also important to note that the prediction model correctly predicted the Penrith Panthers to win the Grand Final. 
+
+### 3. Comparing my 2022 predicted ladder with actual ladder  
+
+**Mean Rank Error (MRE)** = an accuracy metric that assesses how far from the actual ladder outcome were my Elo-based predicted rankings. 
+
+```{r Mean Error Rank, warning=FALSE}
+#2. Mean Error Rank ----------------------------------------------------------------------
+# ladder comparison
+
+ladder_comparison <- predicted_ladder %>% 
+  full_join(actual_ladder, by = 'team') %>% 
+  mutate(
+    rank_error = abs(predicted_rank - actual_rank)
+  )
+#kable ladder_comparison
+knitr::kable(ladder_comparison,
+             caption = "Table 6 - Comparisons between the predicted ladder and the actual 2022 season ladder",
+             align = "c")
+
+#
+mean_rank_error <- mean(ladder_comparison$rank_error, na.rm = TRUE)
+
+
+```
+
+The rank error column indicates how many positions each team was in my predicted ladder from where they finished in the actual 2022 ladder. The MRE is calculated as the average positional difference for each team. The MRE was calculated at **3.4** which meant that on average, each team was predicted to be between either 3 or 4 positions away from their actual finishing spot which is decent accuracy and further enhances an Elo rating system as a good predicting model considering its limitations. 
+
+
+
+
+# Melbourne Storm Case Study  
+
+Table 1 and Figure 1 showcase the dominance of the Melbourne from 2017-2021 as they continued to consistently win games, feature in finals series' and ultimately win Grand Finals (2017 and 2020) whilst unfortunately losing the GF in 2018 as well. During the 2022 season, the Storm again qualified for finals footy in 5th place, where unfortunately they lost their elimination final against the Raiders.  
+  
+My Elo rating prediction model had them finishing in 4th position, only 1 place off their actual standing whilst correctly predicting **56%** of their fixtures (Table 7). The prediction model attributed the Storm to win 15 regular season games which is exactly the number that they did win. However, it did also predict them to beat the Raiders in the first elimination final. One could assume that the Storm 2022 squad performed almost exactly as they were predicted to, allowing little room for over or under performance.    
+
+```{r Storm Case Study}
+
+# accuracy of prediction per team
+# Expand out home and away results so each team appears in both home and away games
+team_accuracy <- nrl2022_results %>%
+  pivot_longer(cols = c(hteam, ateam), names_to = "home_or_away", values_to = "team") %>%
+  mutate(correct = ifelse(predicted_winner == actual_winner, 1, 0)) %>%
+  group_by(team) %>%
+  summarise(
+    games = n(),
+    correct_preds = sum(correct, na.rm = TRUE),
+    accuracy = round(mean(correct, na.rm = TRUE), 2)
+  ) %>%
+  arrange(desc(accuracy))
+
+# storm accuracy
+storm_accuracy <- filter(team_accuracy, team == "Storm")
+
+#kable storm accuracy
+knitr::kable(storm_accuracy,
+             caption = "Table 7 - Accuracy of Storm predicted fixtures in 2022",
+             align = "c")
+
+```
+
+***How can this analysis be used in 2025 and beyond for the Storm?***
+  
+With access to more recent data sets, this analysis can be built upon to include the 2023, 2024 and 2025 season (when finished) to inform on predictions for 2026 and highlight particularly important fixtures before they arrive. It’s a tool to monitor team form, helping staff adjust before poor trends become results and can be adjusted to account for periods of potential form loss like bye or State of Origin affected rounds. Elo rating models also add an extra layer to post-match reviews - showing not just what happened, but how it affected perceived strength whether that be a win or a loss. 
+
+
+# Insights to Coaches, Players and Performance Staff
+  
+How this Elo Rating Prediction Model can support performance decisions:  
+  
+1. Communicate Team Strength Over Time
+  
+Elo ratings reflects performance levels relative to opponent strength, not just wins or losses. Coaches can use this to track: consistency, form trends (improvement or decline) and impact of changes in tactics or player availability. 
+  
+2. Opponent Difficulty Assessment
+  
+Elo gives a quantifiable rating of upcoming opponents, updating weekly. It can be beneficial for coaches as they can use it to plan for stronger/weaker opposition by strategising rest periods, rotations or highlight key matchups ahead of time. It is also important to not underestimate lower-ranked teams based on their ladder position when actually they might be playing well still.  
+  
+3. Performance vs. Expected Performance
+  
+The Elo model predicts expected win probabilities which can be used to compare against actual results. As mentioned previously, the 2022 Storm team performed as expected but an Elo model does offer feedback on over or under performance. Over performance (e.g., beating a strong opponent = big Elo gain) is important to review and the players and staff can learn what they did to win and under performance (e.g., narrow win vs weak opponent = little Elo gain) offers feedback on where they need to improve. Furthermore, the predicted win column for a season offers season-long feedback on whether they over or under achieved for the year. It also informs on where in the season team performance peaked and supports list management decisions beyond what 1 dimensional ladder points suggest. 
+
+4. Visual Feedback
+  
+Elo ratings offer visual representations that are easy to interpret (line graph (Figure 1)). The players and staff can visually see their team strength going up with strong wins but also flattening with inconsistent play. It provides real-time feedback on team performance. 
+  
+Elo models gives coaches a smarter way to assess team and opponent strength and helps players contextualise performance trends and match importance. It’s a low-cost, high-impact tool to inform strategy, preparation, and review. 
+  
+
+
+```{r Insights}
+
+
+
+
+
+```
+
+# Limitations  
+  
+This particular Elo model is fairly bare with external factors that influence match result aside from team strength an having a home ground advantage. A more in depth analysis model could incorporate player details throughout the season (inc. injuries, suspensions, roster changes, retirees) as well as external influences such as weather, fatigue and travel distance. As well, accessing margin pf victory (points differentials) for each game would further enhance the accuracy of Elo rating differences. Furthermore, Elo systems are designed for 2-outcome matches (win/loss), there are draws possible in NRL but it is very rare. An initial limitation of this method of analysis was starting all teams at an equal rating of 1500. This could have been different by accessing previous years data or manually giving each team a rating relevant to their previous years finish. For example, the Cronulla Sharks won the Grand Final in 2016 so they could have had an initial rating of 1650 whereas the Newcastle Knights finished bottom so they might have had a rating of 1350. Another large limitation of this project was that the prediction model only simulated the season once which hasn't given a fair representation of the odds for each game. A better solution would have to implemented a Monte Carlo approach and simulated it 10,000 times and taken averages of results and ladder positions. 
+
+
+```{r Limitations}
+
+
+
+```
+
+# Future Work  
+
+I believe the basis of this workflow can offer many avenues of future work to be built on top of this. Further projects and additions may include:
+
+* Simulating margins of victory (points differential) for each fixture.  
+
+* Incorporate more features other than home advantage (ie. travel distance, rest days, squad updates).    
+* Update model and simulate more seasons with access to more up to date data (ie. trying to predict the 2025 season or next)    
+* build an interactive dashboard or Shiny app for ease of interpretation to coaches and players.  
+
+
+
+
