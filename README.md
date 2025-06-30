@@ -20,6 +20,6 @@ This model supports coaching and analytics by tracking team strength, forecastin
 
 ---
 
-*Author: Gabriel Thornton | 2025*
+*Author: Gabriel Thornton | June 2025*
 
 
