@@ -17,7 +17,7 @@ This model supports coaching and analytics by tracking team strength, forecastin
 - `NRL_Elo_Report.Rmd`: Main analysis
 - `NRL_Elo_Report.html`: Knitted version
 - `Data/`: CSV files used in the project
-- `NRL_Proj`: The Project used in RStudio
+- `NRL_Portfolio.RProj`: The Project used in RStudio
 
 ---
 
